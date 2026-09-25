@@ -2,7 +2,18 @@ import { LinearGradient } from 'expo-linear-gradient';
 import { Stack } from 'expo-router';
 import { StatusBar } from 'expo-status-bar';
 import { useEffect, useRef, useState } from 'react';
-import { Animated, Easing, Image, Platform, Pressable, StyleSheet, Text, View } from 'react-native';
+import {
+  Animated,
+  Easing,
+  Image,
+  Modal,
+  Platform,
+  Pressable,
+  ScrollView,
+  StyleSheet,
+  Text,
+  View,
+} from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 
 import { useScareBoard, type AnimalId, type Problem, type TileId } from '../lib/audio';
@@ -33,6 +44,7 @@ const pad = 12;
 export default function HomeScreen() {
   const board = useScareBoard();
   const { copy, locale, chooseLanguage } = useLanguage();
+  const [infoOpen, setInfoOpen] = useState(false);
   const [box, setBox] = useState({ width: 0, height: 0 });
   const side = tileSide(box.width, box.height);
 
@@ -46,8 +58,19 @@ export default function HomeScreen() {
       <StatusBar style="dark" />
       <Stack.Screen options={{ title: copy.appName }} />
       <View style={styles.header}>
-        <Image source={require('../../assets/icon.png')} style={styles.mark} />
-        <Text style={styles.title}>{copy.appName}</Text>
+        <View style={styles.headerBalance} />
+        <View style={styles.headerCenter}>
+          <Image source={require('../../assets/icon.png')} style={styles.mark} />
+          <Text style={styles.title}>{copy.appName}</Text>
+        </View>
+        <Pressable
+          accessibilityRole="button"
+          accessibilityLabel={copy.info}
+          onPress={() => setInfoOpen(true)}
+          style={styles.infoButton}
+        >
+          <Text style={styles.infoMark}>i</Text>
+        </Pressable>
       </View>
       <View
         style={styles.grid}
@@ -106,6 +129,7 @@ export default function HomeScreen() {
       ) : null}
       <LanguageSwitch locale={locale} onChoose={chooseLanguage} />
       <Text style={styles.credit}>© 2026 Timmy Wong</Text>
+      <InfoSheet copy={copy} open={infoOpen} onClose={() => setInfoOpen(false)} />
       </SafeAreaView>
     </LinearGradient>
   );
@@ -116,6 +140,28 @@ const languages = [
   { id: 'zh-HK', label: '繁', name: '繁體中文' },
   { id: 'zh-Hans', label: '简', name: '简体中文' },
 ] as const satisfies ReadonlyArray<{ id: AppLocale; label: string; name: string }>;
+
+function InfoSheet({ copy, open, onClose }: { copy: Copy; open: boolean; onClose: () => void }) {
+  return (
+    <Modal visible={open} transparent animationType="fade" onRequestClose={onClose}>
+      <View style={styles.scrim}>
+        <Pressable accessibilityRole="button" accessibilityLabel={copy.close} onPress={onClose} style={styles.scrimDismiss} />
+        <View style={styles.infoCard}>
+          <ScrollView contentContainerStyle={styles.infoBody}>
+            {copy.infoBody.map((paragraph) => (
+              <Text key={paragraph} style={styles.infoText}>
+                {paragraph}
+              </Text>
+            ))}
+          </ScrollView>
+          <Pressable accessibilityRole="button" accessibilityLabel={copy.close} onPress={onClose} style={styles.infoClose}>
+            <Text style={styles.infoCloseText}>{copy.close}</Text>
+          </Pressable>
+        </View>
+      </View>
+    </Modal>
+  );
+}
 
 function LanguageSwitch({
   locale,
@@ -466,10 +512,77 @@ const styles = StyleSheet.create({
   header: {
     flexDirection: 'row',
     alignItems: 'center',
-    justifyContent: 'center',
-    gap: 10,
     paddingTop: 8,
     paddingBottom: 2,
+    paddingHorizontal: 12,
+  },
+  headerBalance: {
+    width: 44,
+  },
+  headerCenter: {
+    flex: 1,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 10,
+  },
+  infoButton: {
+    width: 44,
+    height: 44,
+    borderRadius: 22,
+    alignItems: 'center',
+    justifyContent: 'center',
+    backgroundColor: '#FFFFFF',
+  },
+  infoMark: {
+    color: ink,
+    fontFamily: rounded,
+    fontWeight: '800',
+    fontSize: 22,
+    fontStyle: 'italic',
+  },
+  scrim: {
+    flex: 1,
+    alignItems: 'center',
+    justifyContent: 'center',
+    padding: 20,
+    backgroundColor: 'rgba(23, 50, 74, 0.45)',
+  },
+  scrimDismiss: {
+    ...StyleSheet.absoluteFill,
+  },
+  infoCard: {
+    width: '100%',
+    maxWidth: 420,
+    maxHeight: '78%',
+    zIndex: 1,
+    borderRadius: 24,
+    padding: 22,
+    gap: 16,
+    backgroundColor: '#FFFFFF',
+  },
+  infoBody: {
+    gap: 14,
+  },
+  infoText: {
+    color: ink,
+    fontFamily: rounded,
+    fontSize: 16,
+    lineHeight: 24,
+    fontWeight: '600',
+  },
+  infoClose: {
+    height: 44,
+    borderRadius: 22,
+    alignItems: 'center',
+    justifyContent: 'center',
+    backgroundColor: ink,
+  },
+  infoCloseText: {
+    color: '#FFFFFF',
+    fontFamily: rounded,
+    fontWeight: '800',
+    fontSize: 16,
   },
   mark: {
     width: 44,

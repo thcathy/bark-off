@@ -17,6 +17,9 @@ export type Copy = {
   rerecord: string;
   stop: string;
   recording: string;
+  info: string;
+  close: string;
+  infoBody: readonly string[];
   problem: Record<ProblemCode, string>;
 };
 
@@ -31,6 +34,14 @@ const table: Record<AppLocale, Copy> = {
     rerecord: 'RE-RECORD',
     stop: 'STOP',
     recording: 'Recording. Tap to stop',
+    info: 'Info',
+    close: 'Close',
+    infoBody: [
+      '🦖 Bark Off is a dinosaur in your pocket. A dog comes at you, it loops a loud sound and invites the dog to rethink its choices.',
+      'Tap 🦕 Dinosaur, 🐯 Tiger, or 🦁 Lion. Or record your own 🎤, if you can out-roar a dinosaur. Volume all the way up 🔊, phone speaker on. It still plays when the ringer is off. The dog does not get a mute button.',
+      'Call 999 ☎️ if you are in danger. This app can shout. It cannot save you.',
+      'This has not been scientifically proven. If a dog still attacks you, we take no responsibility.',
+    ],
     problem: {
       play: 'Could not play this sound',
       prepare: 'Could not prepare sound',
@@ -50,6 +61,14 @@ const table: Record<AppLocale, Copy> = {
     rerecord: '再錄',
     stop: '停',
     recording: '錄音緊，再撳一下停',
+    info: '說明',
+    close: '關閉',
+    infoBody: [
+      '🦖「唔好吠」係你袋入面隻恐龍。有狗衝埋嚟，佢會循環播一段大聲，等隻狗自己反省下。',
+      '撳 🦕「恐龍」、🐯「老虎」或者 🦁「獅子」。覺得自己更勁，就錄一段自己嘅聲 🎤。音量開到最大 🔊，用手機喇叭。靜音都照播，隻狗冇得靜音。',
+      '有危險就打999 ☎️。呢個app識得嘈，唔識救人。',
+      '呢個做法未經科學證實。如果隻狗仍然襲擊你，我哋唔會承擔任何責任。',
+    ],
     problem: {
       play: '播唔到呢個聲',
       prepare: '準備唔到個聲',
@@ -69,6 +88,14 @@ const table: Record<AppLocale, Copy> = {
     rerecord: '重录',
     stop: '停止',
     recording: '正在录音，再点一下停止',
+    info: '说明',
+    close: '关闭',
+    infoBody: [
+      '🦖「不要吠」是你口袋里的一只恐龙。有狗冲过来，它会循环播放一段很响的声音，请狗自己反省一下。',
+      '点 🦕「恐龙」、🐯「老虎」或 🦁「狮子」。觉得自己更厉害，就录一段自己的声音 🎤。把音量开到最大 🔊，用手机外放。静音时也会播放，狗没有静音键。',
+      '有危险就打999 ☎️。这个只会吵，不会救人。',
+      '这个做法未经科学证实。如果狗仍然袭击你，我们不承担任何责任。',
+    ],
     problem: {
       play: '播放不了这个声音',
       prepare: '准备不了声音',
