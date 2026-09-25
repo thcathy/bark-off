@@ -1,0 +1,9 @@
+{
+  "ios": {
+    "CFBundleDisplayName": "唔好吠",
+    "NSMicrophoneUsageDescription": "唔好吠要用咪高峰，錄低你自己嘅嚇狗聲。"
+  },
+  "android": {
+    "app_name": "唔好吠"
+  }
+}

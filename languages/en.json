@@ -1,0 +1,9 @@
+{
+  "ios": {
+    "CFBundleDisplayName": "Bark Off",
+    "NSMicrophoneUsageDescription": "Bark Off uses the microphone to record your own scare sound."
+  },
+  "android": {
+    "app_name": "Bark Off"
+  }
+}

@@ -1,0 +1,76 @@
+{
+  "expo": {
+    "name": "Bark Off",
+    "slug": "bark-off",
+    "version": "1.0.0",
+    "orientation": "portrait",
+    "icon": "./assets/icon.png",
+    "scheme": "barkoff",
+    "userInterfaceStyle": "automatic",
+    "ios": {
+      "infoPlist": {
+        "CFBundleAllowMixedLocalizations": true
+      }
+    },
+    "locales": {
+      "en": "./languages/en.json",
+      "zh-HK": "./languages/zh-HK.json",
+      "zh-Hans": "./languages/zh-Hans.json",
+      "zh-CN": "./languages/zh-Hans.json"
+    },
+    "android": {
+      "adaptiveIcon": {
+        "foregroundImage": "./assets/icon.png",
+        "backgroundColor": "#65B1FC"
+      },
+      "permissions": [
+        "android.permission.RECORD_AUDIO",
+        "android.permission.MODIFY_AUDIO_SETTINGS",
+        "android.permission.FOREGROUND_SERVICE",
+        "android.permission.FOREGROUND_SERVICE_MEDIA_PLAYBACK"
+      ]
+    },
+    "web": {
+      "output": "static",
+      "favicon": "./assets/icon.png"
+    },
+    "plugins": [
+      "expo-router",
+      [
+        "expo-splash-screen",
+        {
+          "backgroundColor": "#65B1FC",
+          "image": "./assets/icon.png",
+          "imageWidth": 240
+        }
+      ],
+      [
+        "expo-audio",
+        {
+          "microphonePermission": "Bark Off uses the microphone to record your own scare sound."
+        }
+      ],
+      [
+        "expo-localization",
+        {
+          "supportedLocales": {
+            "ios": [
+              "en",
+              "zh-HK",
+              "zh-Hans"
+            ],
+            "android": [
+              "en",
+              "zh-HK",
+              "zh-CN"
+            ]
+          }
+        }
+      ]
+    ],
+    "experiments": {
+      "typedRoutes": true,
+      "reactCompiler": true
+    }
+  }
+}

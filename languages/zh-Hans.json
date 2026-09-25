@@ -1,0 +1,9 @@
+{
+  "ios": {
+    "CFBundleDisplayName": "不要吠",
+    "NSMicrophoneUsageDescription": "不要吠需要使用麦克风，录下你自己用来吓跑狗的声音。"
+  },
+  "android": {
+    "app_name": "不要吠"
+  }
+}
