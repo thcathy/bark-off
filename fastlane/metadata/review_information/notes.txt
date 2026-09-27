@@ -1,0 +1,7 @@
+Bark Off Dog plays a looping animal sound to discourage a barking dog. No account and no login.
+
+To review: open the app and tap Dinosaur, Tiger, or Lion. The sound loops until you tap the same button again. Record uses the microphone and stays on the device.
+
+The app is not a safety device. The listing says to call 999 in danger.
+
+Privacy policy: https://bark-off-dog.pages.dev/privacy-policy.html

@@ -1,0 +1,338 @@
+opt_out_usage
+default_platform(:ios)
+
+ROOT = File.expand_path("..", __dir__)
+APP_IDENTIFIER = ENV.fetch("APP_IDENTIFIER", "com.thcathy.barkoff")
+PACKAGE_NAME = ENV.fetch("ANDROID_PACKAGE_NAME", "com.thcathy.barkoff")
+def ios_native
+  project = Dir.glob(File.join(ROOT, "ios/*.xcodeproj")).first
+  UI.user_error!("iOS project was not created") if project.nil?
+  name = File.basename(project, ".xcodeproj")
+  {
+    project: project,
+    workspace: File.join(ROOT, "ios/#{name}.xcworkspace"),
+    scheme: name
+  }
+end
+IPA_PATH = File.join(ROOT, "build/ios/BarkOff.ipa")
+AAB_PATH = File.join(ROOT, "android/app/build/outputs/bundle/release/app-release.aab")
+
+def repo(command)
+  sh("cd \"#{ROOT}\" && #{command}")
+end
+
+def app_store_api_key
+  key_id = ENV["APP_STORE_CONNECT_API_KEY_ID"].to_s.strip
+  issuer_id = ENV["APP_STORE_CONNECT_API_ISSUER_ID"].to_s.strip
+  key_path = ENV["APP_STORE_CONNECT_API_KEY_PATH"].to_s.strip
+  return nil if key_id.empty? || issuer_id.empty?
+
+  UI.user_error!("Apple API key file is missing at #{key_path}") unless File.exist?(key_path)
+  app_store_connect_api_key(
+    key_id: key_id,
+    issuer_id: issuer_id,
+    key_filepath: key_path,
+    duration: 1200,
+    in_house: false
+  )
+end
+
+def prebuild!(platform)
+  repo("npx expo prebuild --platform #{platform} --clean")
+end
+
+def require_api_key!
+  api_key = app_store_api_key
+  if api_key.nil?
+    UI.user_error!("Set APP_STORE_CONNECT_API_ISSUER_ID in fastlane/.env. It is the Issuer ID on the App Store Connect API page.")
+  end
+  api_key
+end
+
+def signing_xcargs
+  key_id = ENV["APP_STORE_CONNECT_API_KEY_ID"].to_s.strip
+  issuer_id = ENV["APP_STORE_CONNECT_API_ISSUER_ID"].to_s.strip
+  key_path = ENV["APP_STORE_CONNECT_API_KEY_PATH"].to_s.strip
+  args = "-allowProvisioningUpdates"
+  return args if key_id.empty? || issuer_id.empty? || !File.exist?(key_path)
+
+  "#{args} -authenticationKeyPath \"#{key_path}\" -authenticationKeyID #{key_id} -authenticationKeyIssuerID #{issuer_id}"
+end
+
+def next_ios_build_number(api_key)
+  latest_testflight_build_number(
+    api_key: api_key,
+    app_identifier: APP_IDENTIFIER,
+    initial_build_number: 0
+  ).to_i + 1
+end
+
+def next_android_version_code
+  json_key = play_json_key!
+  codes = %w[internal alpha beta production].flat_map do |track|
+    google_play_track_version_codes(
+      json_key: json_key,
+      package_name: PACKAGE_NAME,
+      track: track
+    )
+  rescue StandardError
+    []
+  end
+  codes.map(&:to_i).max.to_i + 1
+end
+
+def set_ios_build_number!(code)
+  require "xcodeproj"
+  native = ios_native
+  project = Xcodeproj::Project.open(native[:project])
+  team = ENV.fetch("APPLE_TEAM_ID")
+  project.targets.each do |target|
+    target.build_configurations.each do |config|
+      config.build_settings["CURRENT_PROJECT_VERSION"] = code.to_s
+      next unless target.name == native[:scheme]
+
+      config.build_settings["DEVELOPMENT_TEAM"] = team
+      config.build_settings["CODE_SIGN_STYLE"] = "Automatic"
+    end
+  end
+  project.save
+  plist = Dir.glob(File.join(ROOT, "ios/**/Info.plist")).find { |path| File.read(path).include?("CFBundleVersion") }
+  UI.user_error!("Could not find the iOS Info.plist") if plist.nil?
+  set_info_plist_value(path: plist, key: "CFBundleVersion", value: code.to_s)
+end
+
+def set_android_version_code!(code)
+  gradle = File.join(ROOT, "android/app/build.gradle")
+  original = File.read(gradle)
+  current = original[/versionCode\s+(\d+)/, 1]
+  UI.user_error!("Could not set Android versionCode in #{gradle}") if current.nil?
+  return if current.to_i == code
+
+  updated = original.sub(/versionCode\s+\d+/, "versionCode #{code}")
+  File.write(gradle, updated)
+end
+
+def build_ios_ipa!(build_number: nil)
+  prebuild!("ios")
+  native = ios_native
+  set_ios_build_number!(build_number) if build_number
+  build_app(
+    workspace: native[:workspace],
+    scheme: native[:scheme],
+    configuration: "Release",
+    export_method: "app-store",
+    output_directory: File.dirname(IPA_PATH),
+    output_name: "BarkOff.ipa",
+    clean: true,
+    xcargs: signing_xcargs,
+    export_options: {
+      method: "app-store",
+      signingStyle: "automatic",
+      teamID: ENV.fetch("APPLE_TEAM_ID")
+    }
+  )
+end
+
+def publish_privacy!
+  app = Spaceship::ConnectAPI::App.find(APP_IDENTIFIER)
+  UI.user_error!("Could not find #{APP_IDENTIFIER} in App Store Connect") if app.nil?
+  usages = Spaceship::ConnectAPI::AppDataUsage.all(
+    app_id: app.id,
+    includes: "dataProtection",
+    limit: 50
+  )
+  unless usages.length == 1 && usages.first.is_not_collected?
+    usages.each(&:delete!)
+    Spaceship::ConnectAPI::AppDataUsage.create(
+      app_id: app.id,
+      app_data_usage_protection_id: "DATA_NOT_COLLECTED"
+    )
+  end
+  state = Spaceship::ConnectAPI::AppDataUsagesPublishState.get(app_id: app.id)
+  published = state.published == true || state.published.to_s == "true"
+  state.publish! unless published
+rescue Spaceship::UnexpectedResponse => error
+  UI.important("Could not publish the privacy label from here (#{error.message}). Continuing with the release.")
+end
+
+def release_ios!
+  api_key = require_api_key!
+  publish_privacy!
+  build_ios_ipa!(build_number: next_ios_build_number(api_key))
+  screenshots = store_images?("fastlane/screenshots")
+  upload_to_app_store(
+    ipa: IPA_PATH,
+    app_identifier: APP_IDENTIFIER,
+    api_key: api_key,
+    metadata_path: File.join(ROOT, "fastlane/metadata"),
+    screenshots_path: File.join(ROOT, "fastlane/screenshots"),
+    languages: ["en-US", "zh-Hans", "zh-Hant"],
+    ignore_language_directory_validation: true,
+    app_rating_config_path: File.join(ROOT, "fastlane/age_rating.json"),
+    skip_metadata: false,
+    skip_screenshots: !screenshots,
+    submit_for_review: true,
+    automatic_release: true,
+    phased_release: false,
+    reject_if_possible: true,
+    force: true,
+    run_precheck_before_submit: false,
+    precheck_include_in_app_purchases: false,
+    submission_information: {
+      add_id_info_uses_idfa: false,
+      export_compliance_uses_encryption: false,
+      content_rights_contains_third_party_content: true,
+      content_rights_has_rights: true
+    }
+  )
+end
+
+def release_android!
+  version_code = next_android_version_code
+  prebuild!("android")
+  set_android_version_code!(version_code)
+  build_android_aab_without_prebuild!
+  begin
+    upload_play_listing!(
+      aab: AAB_PATH,
+      skip_upload_aab: false,
+      track: "production",
+      release_status: "completed"
+    )
+  rescue StandardError => error
+    draft_only = error.message.to_s.include?("Only releases with status draft may be created on draft app")
+    raise unless draft_only
+
+    upload_play_listing!(
+      aab: AAB_PATH,
+      skip_upload_aab: false,
+      track: "production",
+      release_status: "draft",
+      version_code: version_code
+    )
+    UI.user_error!(
+      "Uploaded version #{version_code} as a production draft. Play will not review a draft app until Content rating and Data safety are saved once in Play Console."
+    )
+  end
+end
+
+def store_images?(relative)
+  Dir.glob(File.join(ROOT, relative, "**", "*.png")).any? ||
+    Dir.glob(File.join(ROOT, relative, "**", "*.jpg")).any? ||
+    Dir.glob(File.join(ROOT, relative, "**", "*.jpeg")).any?
+end
+
+def play_json_key!
+  json_key = ENV["PLAY_STORE_JSON_KEY"].to_s
+  UI.user_error!("Set PLAY_STORE_JSON_KEY in fastlane/.env") if json_key.empty? || !File.exist?(json_key)
+  json_key
+end
+
+def upload_app_store_listing!(api_key)
+  UI.user_error!("Set APP_STORE_CONNECT_API_ISSUER_ID in fastlane/.env. It is the Issuer ID on the App Store Connect API page.") if api_key.nil?
+  screenshots = store_images?("fastlane/screenshots")
+  UI.important("No PNGs in fastlane/screenshots, so this upload leaves App Store screenshots unchanged") unless screenshots
+  upload_to_app_store(
+    app_identifier: APP_IDENTIFIER,
+    api_key: api_key,
+    metadata_path: File.join(ROOT, "fastlane/metadata"),
+    screenshots_path: File.join(ROOT, "fastlane/screenshots"),
+    languages: ["en-US", "zh-Hans", "zh-Hant"],
+    ignore_language_directory_validation: true,
+    skip_binary_upload: true,
+    skip_metadata: false,
+    skip_screenshots: !screenshots,
+    overwrite_screenshots: screenshots,
+    submit_for_review: false,
+    run_precheck_before_submit: false,
+    force: true,
+    precheck_include_in_app_purchases: false
+  )
+end
+
+def upload_play_listing!(extra = {})
+  screenshots = store_images?("fastlane/metadata/android")
+  UI.important("No PNGs in fastlane/metadata/android, so this upload leaves Play screenshots unchanged") unless screenshots
+  upload_to_play_store({
+    json_key: play_json_key!,
+    package_name: PACKAGE_NAME,
+    metadata_path: File.join(ROOT, "fastlane/metadata/android"),
+    skip_upload_apk: true,
+    skip_upload_aab: true,
+    skip_upload_metadata: false,
+    skip_upload_changelogs: false,
+    skip_upload_images: !screenshots,
+    skip_upload_screenshots: !screenshots
+  }.merge(extra))
+end
+
+def build_android_aab!
+  prebuild!("android")
+  build_android_aab_without_prebuild!
+end
+
+def build_android_aab_without_prebuild!
+  store = ENV["BARK_OFF_UPLOAD_STORE_FILE"].to_s
+  UI.user_error!("Set BARK_OFF_UPLOAD_STORE_FILE in fastlane/.env") if store.empty? || !File.exist?(store)
+  ENV["ORG_GRADLE_PROJECT_BARK_OFF_UPLOAD_STORE_FILE"] = store
+  ENV["ORG_GRADLE_PROJECT_BARK_OFF_UPLOAD_STORE_PASSWORD"] = ENV.fetch("BARK_OFF_UPLOAD_STORE_PASSWORD")
+  ENV["ORG_GRADLE_PROJECT_BARK_OFF_UPLOAD_KEY_ALIAS"] = ENV.fetch("BARK_OFF_UPLOAD_KEY_ALIAS")
+  ENV["ORG_GRADLE_PROJECT_BARK_OFF_UPLOAD_KEY_PASSWORD"] = ENV.fetch("BARK_OFF_UPLOAD_KEY_PASSWORD")
+  repo("cd android && ./gradlew bundleRelease")
+  UI.user_error!("AAB not found at #{AAB_PATH}") unless File.exist?(AAB_PATH)
+end
+
+desc "Release iOS and Android. Each store publishes automatically after review"
+lane :release do
+  release_ios!
+  release_android!
+end
+
+platform :ios do
+  desc "Build, submit for review, and release automatically when Apple approves"
+  lane :release do
+    release_ios!
+  end
+
+  desc "Build and upload to TestFlight"
+  lane :beta do
+    api_key = require_api_key!
+    build_ios_ipa!(build_number: next_ios_build_number(api_key))
+    upload_to_testflight(
+      ipa: IPA_PATH,
+      app_identifier: APP_IDENTIFIER,
+      api_key: api_key,
+      skip_waiting_for_build_processing: true
+    )
+  end
+
+  desc "Upload the App Store listing and screenshots from this repo"
+  lane :metadata do
+    upload_app_store_listing!(require_api_key!)
+  end
+end
+
+platform :android do
+  desc "Build, submit for review, and release automatically when Google approves"
+  lane :release do
+    release_android!
+  end
+
+  desc "Build and upload to the Play internal track"
+  lane :beta do
+    build_android_aab!
+    upload_play_listing!(
+      aab: AAB_PATH,
+      skip_upload_aab: false,
+      track: ENV.fetch("PLAY_TRACK", "internal"),
+      release_status: "draft"
+    )
+  end
+
+  desc "Upload the Play listing and screenshots from this repo"
+  lane :metadata do
+    code = next_android_version_code - 1
+    UI.user_error!("Play has no version yet, so the listing changelog cannot be uploaded") if code < 1
+    upload_play_listing!(version_code: code)
+  end
+end

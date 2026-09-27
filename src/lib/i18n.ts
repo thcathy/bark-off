@@ -25,7 +25,7 @@ export type Copy = {
 
 const table: Record<AppLocale, Copy> = {
   en: {
-    appName: 'Bark Off',
+    appName: 'Bark Off Dog',
     dinosaur: 'DINOSAUR',
     tiger: 'TIGER',
     lion: 'LION',
@@ -37,7 +37,7 @@ const table: Record<AppLocale, Copy> = {
     info: 'Info',
     close: 'Close',
     infoBody: [
-      '🦖 Bark Off is a dinosaur in your pocket. A dog comes at you, it loops a loud sound and invites the dog to rethink its choices.',
+      '🦖 Bark Off Dog is a dinosaur in your pocket. A dog comes at you, it loops a loud sound and invites the dog to rethink its choices.',
       'Tap 🦕 Dinosaur, 🐯 Tiger, or 🦁 Lion. Or record your own 🎤, if you can out-roar a dinosaur. Volume all the way up 🔊, phone speaker on. It still plays when the ringer is off. The dog does not get a mute button.',
       'Call 999 ☎️ if you are in danger. This app can shout. It cannot save you.',
       'This has not been scientifically proven. If a dog still attacks you, we take no responsibility.',

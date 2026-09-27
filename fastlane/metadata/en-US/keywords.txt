@@ -1,0 +1,1 @@
+dog,bark,scare,roar,dinosaur,tiger,lion,loud,speaker,silent
