@@ -5,11 +5,12 @@ import {
   setAudioModeAsync,
   useAudioPlayer,
   useAudioRecorder,
+  type AudioMetadata,
   type AudioPlayer,
 } from 'expo-audio';
 import { File, Paths } from 'expo-file-system';
 import { useEffect, useRef, useState } from 'react';
-import { Platform } from 'react-native';
+import { AppState, Platform } from 'react-native';
 
 export const clips = {
   dinosaur: require('../../assets/sounds/dinosaur.m4a'),
@@ -43,12 +44,54 @@ const playbackMode = {
   interruptionMode: 'doNotMix' as const,
   shouldRouteThroughEarpiece: false,
   allowsRecording: false,
+  // expo-audio pauses players on Home/lock unless this is set. Android also
+  // ends background playback after about three minutes without lock-screen controls.
+  shouldPlayInBackground: true,
 };
 
 const recordingMode = {
   ...playbackMode,
   allowsRecording: true,
+  shouldPlayInBackground: false,
 };
+
+const lockScreenOptions = {
+  showSeekForward: false,
+  showSeekBackward: false,
+};
+
+export type ScareLabels = {
+  appName: string;
+  dinosaur: string;
+  tiger: string;
+  lion: string;
+  mySound: string;
+};
+
+function titleFor(tile: TileId, labels: ScareLabels): string {
+  switch (tile) {
+    case 'dinosaur':
+      return labels.dinosaur;
+    case 'tiger':
+      return labels.tiger;
+    case 'lion':
+      return labels.lion;
+    case 'mine':
+      return labels.mySound;
+    default: {
+      const exhaustive: never = tile;
+      return exhaustive;
+    }
+  }
+}
+
+function metadataFor(tile: TileId, labels: ScareLabels): AudioMetadata {
+  return {
+    title: titleFor(tile, labels),
+    artist: labels.appName,
+    albumTitle: labels.appName,
+  };
+}
 
 function extensionFrom(uri: string): string {
   const match = uri.split('?')[0]?.match(/\.([a-z0-9]+)$/i);
@@ -149,7 +192,7 @@ export async function persistMine(sourceUri: string): Promise<string> {
   }
 }
 
-export function useScareBoard() {
+export function useScareBoard(labels: ScareLabels) {
   const dinosaur = useAudioPlayer(clips.dinosaur);
   const tiger = useAudioPlayer(clips.tiger);
   const lion = useAudioPlayer(clips.lion);
@@ -166,14 +209,33 @@ export function useScareBoard() {
   const mineRestarting = useRef(false);
   const recordingRef = useRef(false);
   const recordingLock = useRef(false);
+  const ownsLockScreen = useRef<TileId | null>(null);
+  const ignorePause = useRef(false);
 
   function setActiveTile(id: TileId | null) {
     activeRef.current = id;
     setActive(id);
   }
 
+  function showLockScreen(tile: TileId) {
+    ownsLockScreen.current = tile;
+    playersRef.current[tile].setActiveForLockScreen(
+      true,
+      metadataFor(tile, labels),
+      lockScreenOptions,
+    );
+  }
+
+  function hideLockScreen() {
+    const id = ownsLockScreen.current;
+    if (!id) return;
+    ownsLockScreen.current = null;
+    playersRef.current[id].clearLockScreenControls();
+  }
+
   function stop(player: AudioPlayer) {
     player.loop = false;
+    hideLockScreen();
     player.pause();
     void player.seekTo(0);
   }
@@ -184,6 +246,7 @@ export function useScareBoard() {
 
   function fail(tile: TileId) {
     if (activeRef.current !== tile) return;
+    ignorePause.current = false;
     stop(playersRef.current[tile]);
     setActiveTile(null);
     setProblem({ tile, code: 'play' });
@@ -192,6 +255,7 @@ export function useScareBoard() {
   function start(tile: TileId) {
     const player = playersRef.current[tile];
     if (activeRef.current === tile) {
+      ignorePause.current = false;
       stop(player);
       setActiveTile(null);
       setProblem(null);
@@ -201,11 +265,14 @@ export function useScareBoard() {
     setProblem(null);
     // A recording's built-in loop stops after a few passes. Replay that one from the start.
     player.loop = tile !== 'mine';
+    ignorePause.current = true;
     setActiveTile(tile);
+    showLockScreen(tile);
     void player.seekTo(0);
     try {
       player.play();
     } catch {
+      ignorePause.current = false;
       fail(tile);
     }
   }
@@ -221,6 +288,7 @@ export function useScareBoard() {
           !mineRestarting.current
         ) {
           mineRestarting.current = true;
+          ignorePause.current = true;
           void (async () => {
             try {
               const player = playersRef.current.mine;
@@ -237,6 +305,22 @@ export function useScareBoard() {
           return;
         }
         if (status.error) fail(id);
+        if (recordingRef.current) return;
+        if (status.playing && ownsLockScreen.current === id) {
+          ignorePause.current = false;
+          if (activeRef.current !== id) setActiveTile(id);
+          return;
+        }
+        if (
+          !status.playing &&
+          !ignorePause.current &&
+          !mineRestarting.current &&
+          activeRef.current === id &&
+          ownsLockScreen.current === id &&
+          !playersRef.current[id].playing
+        ) {
+          setActiveTile(null);
+        }
       }),
     );
     return () => {
@@ -266,7 +350,31 @@ export function useScareBoard() {
   }, [mine]);
 
   useEffect(() => {
+    const id = ownsLockScreen.current;
+    if (!id) return;
+    playersRef.current[id].updateLockScreenMetadata(metadataFor(id, labels));
+  }, [labels, dinosaur, tiger, lion, mine]);
+
+  useEffect(() => {
+    const subscription = AppState.addEventListener('change', (state) => {
+      if (state !== 'active' || recordingRef.current || mineRestarting.current) return;
+      const id = ownsLockScreen.current;
+      if (!id) return;
+      if (playersRef.current[id].playing) {
+        ignorePause.current = false;
+        if (activeRef.current !== id) setActiveTile(id);
+        return;
+      }
+      ignorePause.current = false;
+      if (activeRef.current === id) setActiveTile(null);
+    });
+    return () => subscription.remove();
+  }, []);
+
+  useEffect(() => {
     return () => {
+      const id = ownsLockScreen.current;
+      if (id) playersRef.current[id].clearLockScreenControls();
       dinosaur.pause();
       tiger.pause();
       lion.pause();

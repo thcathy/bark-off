@@ -42,8 +42,8 @@ const gap = 12;
 const pad = 12;
 
 export default function HomeScreen() {
-  const board = useScareBoard();
   const { copy, locale, chooseLanguage } = useLanguage();
+  const board = useScareBoard(copy);
   const [infoOpen, setInfoOpen] = useState(false);
   const [box, setBox] = useState({ width: 0, height: 0 });
   const side = tileSide(box.width, box.height);
