@@ -2,6 +2,8 @@ Bark Off Dog plays a looping animal sound to discourage a barking dog. No accoun
 
 To review: open the app and tap Dinosaur, Tiger, or Lion. The sound loops until you tap the same button again. Record uses the microphone and stays on the device.
 
+Background audio is intentional. With a scare sound playing, lock the iPhone or go to the Home Screen. The roar keeps looping, and the Lock Screen shows Now Playing controls. Unlock and tap the same button to stop it.
+
 The app is not a safety device. The listing says to call 999 in danger.
 
 Privacy policy: https://bark-off-dog.pages.dev/privacy-policy.html
